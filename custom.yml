@@ -1,0 +1,23 @@
+# Below line is needed to ensure default values are applied for missing custom overrides.
+dynaconf_merge: true
+ble:
+  device_id: 0
+
+discovery_mode: true
+
+influxdb:
+  enabled: true
+  url: http://localhost:8086
+  database: raspidb
+  measurement: environment
+  
+
+thermometers:
+  - mac: AA:BB:CC:DD:11:22
+    name: Upstairs
+    tags:
+      Firmware: atc
+  - mac: AA:BB:CC:DD:11:33
+    name: Downstairs
+    tags:
+      Firmware: pvvx

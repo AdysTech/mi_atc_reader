@@ -1,0 +1,20 @@
+ble:
+  device_id: 0
+
+discovery_mode: true
+
+logging:
+  level: INFO
+
+influxdb:
+  enabled: false
+  url: http://localhost:8086
+  database: influx
+  measurement: environment
+  precision: s
+
+thermometers:
+  - mac: AA:BB:CC:DD:11:22
+    name: XiomiMijia
+    tags:
+      Firmware: pvvx
