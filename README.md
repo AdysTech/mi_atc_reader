@@ -18,5 +18,5 @@ It also supports device discovery so that before the devices can be added to con
 
 ### docker
     pull the image `docker pull adystech/mi_atc_reader`
-    start mi_atc_reader image with access to host network `--net=host --privileged` which is required for the image to see the bluetooth devices.
+    docker service create --name mi_atc_reader --cap-add NET_ADMIN --network host mi_atc_reader    
     custom.yml needs to be mapped to  `/custom.yml` for the image to recognize it.
