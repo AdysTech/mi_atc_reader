@@ -14,6 +14,7 @@ from dataclasses import dataclass, fields
 from collections import deque
 import threading
 import requests
+import signal
 #################################
 
 
@@ -65,12 +66,14 @@ def le_advertise_packet_handler(mac, adv_type, data, rssi):
             reading.sensor = match
             readingQueue.append(reading)
 
-def handle_retry(reading:SensorReading):
+
+def handle_retry(reading: SensorReading):
     if len(readingQueue) < config.errorbuffer.max_items:
         readingQueue.appendleft(reading)
     else:
         logging.warning(f'retry queue full, Discoreded Message: {reading}!')
     exit_event.wait(5)
+
 
 def deque_thread():
     while True:
@@ -84,25 +87,29 @@ def deque_thread():
                 payload = f"{config.influxdb.measurement},{tags},name={reading.sensor['name']},mac={reading.sensor['mac']} temperature={reading.temperature},humidity={reading.humidity},battery={reading.battery},voltage={reading.voltage} {reading.timestamp}"
                 try:
                     r = requests.post(influxdb_write_endpoint,
-                                    data=payload, timeout=1)
+                                      data=payload, timeout=1)
                     # ', return:{r.status_code}')
-                    logging.debug(f'url:{influxdb_write_endpoint}, data: {payload}')
-                    if r.status_code != 204:                        
+                    logging.debug(
+                        f'url:{influxdb_write_endpoint}, data: {payload}')
+                    if r.status_code != 204:
                         if r.status_code == 404:
-                            logging.warning(f'Influxdb database missing!!.. manually create the DB.')
+                            logging.warning(
+                                f'Influxdb database missing!!.. manually create the DB.')
                             handle_retry(reading)
                         else:
-                            logging.warning(f'Failed to save{reading} due to {r.text}')
+                            logging.warning(
+                                f'Failed to save{reading} due to {r.text}')
                 except requests.Timeout:
                     logging.warning(f'Influxdb Timeout.. retrying')
                     handle_retry(reading)
                 except requests.ConnectionError:
-                    logging.warning(f'Unable to connect to InfluxDB.. retrying')
+                    logging.warning(
+                        f'Unable to connect to InfluxDB.. retrying')
                     handle_retry(reading)
         except IndexError:
             exit_event.wait(1)
         except Exception as e:
-            logging.exception(e)            
+            logging.exception(e)
         if exit_event.is_set():
             if len(readingQueue) > 0:
                 logging.warning(f"Queue had {len(readingQueue)} unsaved items")
@@ -166,20 +173,30 @@ def loadConfig() -> Dynaconf:
     return config
 
 
+def exit_gracefully(signum, stack_frame):
+    # Raises SystemExit(0):
+    logging.log(level=log_level, msg=f'received signal{signum}')
+    exit_event.set()
+    sys.exit(0)
+
+
 if __name__ == '__main__':  # has a blocking call at the end
+    signal.signal(signal.SIGINT, exit_gracefully)
+    signal.signal(signal.SIGTERM, exit_gracefully)
     config = loadConfig()
     log_level = getattr(logging, config.logging.level.upper(), None)
     if not isinstance(log_level, int):
         raise ValueError(f'Invalid log level: {config.logging.level}')
     logging.basicConfig(level=log_level,
                         format='%(asctime)-15s %(levelname)s: %(message)s')
-    print('using configuration')
-    print(config.as_dict())
-    print(
-        f'Current log level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}')
+    logging.log(level=log_level, msg='using configuration')
+    logging.log(level=log_level, msg=f'{config.as_dict()}')
+    logging.log(level=log_level,
+                msg=f'Current log level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}')
 
     if log_level > logging.INFO and config.discovery_mode:
-        print("Device discovery messages may not appear in the log in current log level. Needs to be at least at INFO")
+        logging.log(
+            level=log_level, msg="Device discovery messages may not appear in the log in current log level. Needs to be at least at INFO")
 
     dev_id = config.ble.device_id
     logging.info(f'Enabling bluetooth device {dev_id}')
@@ -193,7 +210,7 @@ if __name__ == '__main__':  # has a blocking call at the end
 
     if config.influxdb.enabled:
         influxdb_write_endpoint = f"{config.influxdb.url}/write?db={config.influxdb.database}&precision={config.influxdb.precision}"
-        logging.debug(f'writing to {influxdb_write_endpoint}')
+        logging.info(f'writing to {influxdb_write_endpoint}')
     # Set filter to "True" to see only one packet per device
     logging.info('Start scanning for BLE messages')
     enable_le_scan(sock, filter_duplicates=False)
@@ -209,9 +226,9 @@ if __name__ == '__main__':  # has a blocking call at the end
         # advertisement packet is detected)
         parse_le_advertising_events(sock,
                                     handler=le_advertise_packet_handler,
-                                    debug=config.ble.debug)
+                                    debug=config.ble.debug, control_event=exit_event)
     # Scan until Ctrl-C
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         logging.info('received exit signal')
         disable_le_scan(sock)
         logging.info('waiting for background operations to complete')
