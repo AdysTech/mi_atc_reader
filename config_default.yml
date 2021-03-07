@@ -1,5 +1,6 @@
 ble:
   device_id: 0
+  debug: false
 
 discovery_mode: true
 
@@ -12,6 +13,9 @@ influxdb:
   database: influx
   measurement: environment
   precision: s
+
+errorbuffer:
+  max_items : 50
 
 thermometers:
   - mac: AA:BB:CC:DD:11:22
