@@ -1,22 +1,22 @@
-FROM python:3 as base
+FROM python:3 as base_setup
 
 RUN apt-get install libbluetooth-dev
 RUN pip install bluepy
 RUN pip install pybluez
 RUN pip install requests
 RUN pip install dynaconf
-RUN git clone https://github.com/mvadu/py-bluetooth-utils.git
+RUN git clone https://github.com/mvadu/py-bluetooth-utils.git --depth=1
 RUN cp py-bluetooth-utils/bluetooth_utils.py .
 
 #copy the default config file
 COPY config_default.yml config_default.yaml 
 COPY mi_atc_reader.py mi_atc_reader.py
 
-from base
+from base_setup as test_image
 RUN pip install pytest
 RUN python -m pytest mi_atc_reader.py -rA
 
-from base
+from base_setup as final_image
 LABEL "contact"="info@adystech.com"
 LABEL repo="https://github.com/AdysTech/mi_atc_reader/"
 LABEL version="1.0"
