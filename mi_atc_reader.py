@@ -59,7 +59,7 @@ def le_advertise_packet_handler(mac, adv_type, data, rssi):
 
     if config.discovery_mode:
         logging.info(
-            f"Device: {mac} Temp: {reading.temperature}c Humidity: {reading.humidity}% Batt: {reading.battery}% ({reading.voltage}v)")
+            f"Device: {mac} firmware: {'pvvx' if pvvx else 'atc1441'} Temp: {reading.temperature}c Humidity: {reading.humidity}% Batt: {reading.battery}% ({reading.voltage}v)")
 
     if len(config.thermometers) > 0:
         if any((match := t)['mac'] == mac for t in config.thermometers):
