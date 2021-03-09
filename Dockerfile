@@ -12,11 +12,11 @@ RUN cp py-bluetooth-utils/bluetooth_utils.py .
 COPY config_default.yml config_default.yaml 
 COPY mi_atc_reader.py mi_atc_reader.py
 
-from base_setup
+from base_setup as test_image
 RUN pip install pytest
 RUN python -m pytest mi_atc_reader.py -rA
 
-from base_setup
+from base_setup as final_image
 LABEL "contact"="info@adystech.com"
 LABEL repo="https://github.com/AdysTech/mi_atc_reader/"
 LABEL version="1.0"

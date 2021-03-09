@@ -30,4 +30,5 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64,linux/armhf
           push: false
+          target: test_image
             
