@@ -1,0 +1,3 @@
+dynaconf
+PyBluez
+requests

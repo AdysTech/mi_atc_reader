@@ -1,16 +1,29 @@
-FROM python:3 as base_setup
-
-RUN apt-get install libbluetooth-dev
-RUN pip install bluepy
-RUN pip install pybluez
-RUN pip install requests
-RUN pip install dynaconf
-RUN git clone https://github.com/mvadu/py-bluetooth-utils.git --depth=1
-RUN cp py-bluetooth-utils/bluetooth_utils.py .
+FROM python:3-slim as base_setup
 
 #copy the default config file
 COPY config_default.yml config_default.yaml 
 COPY mi_atc_reader.py mi_atc_reader.py
+COPY requirements.txt requirements.txt
+COPY entry.sh entry.sh
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends  \
+        gcc \
+        git \	
+        libbluetooth3 \
+        libbluetooth-dev \
+        python-dev \
+    && pip install -r requirements.txt \
+    && git clone https://github.com/colin-guyon/py-bluetooth-utils.git --depth=1 \
+    && cp py-bluetooth-utils/bluetooth_utils.py . \
+    && apt-get remove -y \
+        gcc \
+        git \
+        libbluetooth-dev \
+        python-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
 
 from base_setup as test_image
 RUN pip install pytest
@@ -23,5 +36,4 @@ LABEL version="1.0"
 LABEL description="Provides a python script as a docker service  \
 which can read BLE advertisements from Xiaomi Smart Bluetooth Thermometer & Hygrometer. \
 Thermometers needs to be running custom open source firmware from pvvx or atc1441"
-ENTRYPOINT python ./mi_atc_reader.py
-#ENTRYPOINT /bin/bash
+CMD [ "./entry.sh" ]
