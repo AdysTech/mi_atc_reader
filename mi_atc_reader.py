@@ -65,6 +65,7 @@ def le_advertise_packet_handler(mac, adv_type, data, rssi):
         if any((match := t)['mac'] == mac for t in config.thermometers):
             reading.sensor = match
             readingQueue.append(reading)
+    return not exit_event.is_set()
 
 
 def handle_retry(reading: SensorReading):
@@ -226,9 +227,9 @@ if __name__ == '__main__':  # has a blocking call at the end
         # advertisement packet is detected)
         parse_le_advertising_events(sock,
                                     handler=le_advertise_packet_handler,
-                                    debug=config.ble.debug, control_event=exit_event)
+                                    debug=config.ble.debug)
     # Scan until Ctrl-C
-    except (KeyboardInterrupt, SystemExit):
+    except (KeyboardInterrupt, SystemExit, StopIteration):
         logging.info('received exit signal')
         disable_le_scan(sock)
         logging.info('waiting for background operations to complete')
