@@ -13,10 +13,33 @@ It also supports device discovery so that before the devices can be added to con
 
 ## Installation
 ### Standalone
-    - Refer the docker file for dependencies, and install those packages.
-    - run mi_atc_reader.py
+    - pip install -r requirements.txt
+    - python mi_atc_reader.py
 
 ### docker
-    pull the image `docker pull adystech/mi_atc_reader`
-    docker service create --name mi_atc_reader --cap-add NET_ADMIN --network host mi_atc_reader    
-    custom.yml needs to be mapped to  `/custom.yml` for the image to recognize it.
+
+    #### standalone service
+    `docker service create --name mi_atc_reader --cap-add NET_ADMIN --mount type=bind,source=custom.yml,destination=/custom.yml adystech/mi_atc_reader`
+
+    #### swarm docker stack deploy
+    use docker-compose like below
+
+    ```yml
+    version: '3.8'
+
+    services:
+    atc_reader:
+        image: adystech/mi_atc_reader:latest
+        volumes:
+        - config/custom.yml:/custom.yml
+        cap_add:
+        - NET_ADMIN
+        networks:
+        - host_net
+    networks:
+    host_net:
+        external: true
+        name: host
+    ```
+
+    `docker stack deploy -c docker-compose.yml mi_reader`
