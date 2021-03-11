@@ -4,7 +4,7 @@ FROM python:3-slim as base_setup
 COPY config_default.yml config_default.yaml 
 COPY mi_atc_reader.py mi_atc_reader.py
 COPY requirements.txt requirements.txt
-COPY entry.sh entry.sh
+COPY --chmod=0777 entry.sh entry.sh
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends  \

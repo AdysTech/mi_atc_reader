@@ -16,30 +16,30 @@ It also supports device discovery so that before the devices can be added to con
     - pip install -r requirements.txt
     - python mi_atc_reader.py
 
-### docker
+## docker
 
-    #### standalone service
-    `docker service create --name mi_atc_reader --cap-add NET_ADMIN --mount type=bind,source=custom.yml,destination=/custom.yml adystech/mi_atc_reader`
+### standalone service
+`docker service create --name mi_atc_reader --cap-add NET_ADMIN --mount type=bind,source=custom.yml,destination=/custom.yml adystech/mi_atc_reader`
 
-    #### swarm docker stack deploy
-    use docker-compose like below
+### swarm docker stack deploy
+use docker-compose like below
 
-    ```yml
-    version: '3.8'
+```yml
+version: '3.8'
 
-    services:
-    atc_reader:
-        image: adystech/mi_atc_reader:latest
-        volumes:
-        - config/custom.yml:/custom.yml
-        cap_add:
-        - NET_ADMIN
-        networks:
-        - host_net
+services:
+atc_reader:
+    image: adystech/mi_atc_reader:latest
+    volumes:
+    - config/custom.yml:/custom.yml
+    cap_add:
+    - NET_ADMIN
     networks:
-    host_net:
-        external: true
-        name: host
-    ```
+    - host_net
+networks:
+host_net:
+    external: true
+    name: host
+```
 
-    `docker stack deploy -c docker-compose.yml mi_reader`
+`docker stack deploy -c docker-compose.yml mi_reader`
