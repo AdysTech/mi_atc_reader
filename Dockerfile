@@ -35,7 +35,7 @@ RUN pylint mi_atc_reader.py --disable=logging-fstring-interpolation,line-too-lon
 RUN pip install pytest
 RUN python -m pytest mi_atc_reader.py -rA
 
-#from base_setup as final_image
+from base_setup as final_image
 LABEL "contact"="info@adystech.com"
 LABEL repo="https://github.com/AdysTech/mi_atc_reader/"
 LABEL version="1.2"
