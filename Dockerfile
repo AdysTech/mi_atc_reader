@@ -26,13 +26,19 @@ RUN apt-get update \
 
 
 from base_setup as test_image
+RUN pip install pylint
+#pylint exit status is non zero for warnings as well. So first step we will get only errors
+RUN pylint mi_atc_reader.py --errors-only 
+#second pylint prints the report, but we ignore the exit status with || :
+RUN pylint mi_atc_reader.py --disable=logging-fstring-interpolation,line-too-long || :
+
 RUN pip install pytest
 RUN python -m pytest mi_atc_reader.py -rA
 
-from base_setup as final_image
+#from base_setup as final_image
 LABEL "contact"="info@adystech.com"
 LABEL repo="https://github.com/AdysTech/mi_atc_reader/"
-LABEL version="1.0"
+LABEL version="1.2"
 LABEL description="Provides a python script as a docker service  \
 which can read BLE advertisements from Xiaomi Smart Bluetooth Thermometer & Hygrometer. \
 Thermometers needs to be running custom open source firmware from pvvx or atc1441"

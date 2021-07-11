@@ -22,3 +22,12 @@ thermometers:
     name: XiomiMijia
     tags:
       Firmware: pvvx
+
+mqtt:
+  enabled: false
+  broker : localhost
+  port : 1883
+  username: mqtt
+  password: mqtt
+  client_id : "mi_atc"
+  topic_prefix : "mi_atc"
