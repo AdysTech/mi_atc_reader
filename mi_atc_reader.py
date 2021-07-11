@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
+"""module to listen for BLE aderts from Xiaomi Mijia thermometers running custom firstmare and post to Influx or mqtt"""
 import sys
 import os
-from dynaconf import Dynaconf
-from datetime import datetime
 import time
 import logging
+import threading
+import signal
+import json
+from dataclasses import dataclass, asdict
+from collections import deque
+import struct
+import requests
+from dynaconf import Dynaconf
 import bluetooth._bluetooth as bluez
+import paho.mqtt.client as mqtt
 from bluetooth_utils import (toggle_device, enable_le_scan,
                              parse_le_advertising_events,
-                             disable_le_scan, raw_packet_to_str)
-import struct
-from dataclasses import dataclass, fields
-from collections import deque
-import threading
-import requests
-import signal
+                             disable_le_scan)
+
 #################################
 
 
 @dataclass
 class SensorReading:
+    """ Sensor reading class, covers both flavors of firmware. """
     temperature: float = 0
     humidity: int = 0
     voltage: float = 0
@@ -28,47 +32,58 @@ class SensorReading:
     sensor: dict = None
     counter: int = 0
 
-    def from_dict(self, d):
-        if not isinstance(d, dict):
-            raise ValueError(f"{type(d)} is Not a dict")
+    def from_dict(self, data):
+        """constructor"""
+        if not isinstance(data, dict):
+            raise ValueError(f"{type(data)} is Not a dict")
         try:
-            self.temperature = d['temperature']
-            self.humidity = d['humidity']
-            self.voltage = d['voltage']
-            self.battery = d['battery']
-            self.timestamp = d['timestamp']
-            self.sensor = d['sensor']
-        except:
-            return d  # Not a dataclass field
+            self.temperature = data['temperature']
+            self.humidity = data['humidity']
+            self.voltage = data['voltage']
+            self.battery = data['battery']
+            self.timestamp = data['timestamp']
+            self.sensor = data['sensor']
+        except (ModuleNotFoundError, ValueError, AttributeError, TypeError) as error:
+            raise TypeError(
+                f"got '{type(data)!r}' object, couldn't convert to SensorReading") from error
 
 
 def le_advertise_packet_handler(mac, adv_type, data, rssi):
-    # Check to make sure we are getting this message from one of ATC firmware forks.
-    # both atc1441 and pvvx forks send data on GATT Service 0x181A Environmental Sensing
-    if struct.unpack('<H', data[3:5])[0] != 0x181A:
-        return
+    """BLE advertisement handler which will unpack and extract sensor reading.
 
-    # data format adds mac as part of data structure. just another check to ensure we are not listening to any other BLE on 0x181A
+    This function checks if its from Mijia atc firmware to make sure we are
+    getting this message from one of ATC firmware forks.
+    Both atc1441 and pvvx forks send data on GATT Service 0x181A Environmental Sensing
+    """
+    exit_stat = not exit_event.is_set()
+    if struct.unpack('<H', data[3:5])[0] != 0x181A:
+        return exit_stat
+
+    # data format adds mac as part of data structure.
+    # just another check to ensure we are not listening to any other BLE on 0x181A
     data_mac, pvvx = get_data_mac(data)
-    if(mac.upper() != data_mac.hex(':').upper()):
-        return
+    if mac.upper() != data_mac.hex(':').upper():
+        return exit_stat
 
     reading = parse_pvvx_format(data) if pvvx else parse_atc_format(data)
-    if reading == None:
-        return
+    if reading is None:
+        return exit_stat
 
     if config.discovery_mode:
         logging.info(
             f"Device: {mac} firmware: {'pvvx' if pvvx else 'atc1441'} Temp: {reading.temperature}c Humidity: {reading.humidity}% Batt: {reading.battery}% ({reading.voltage}v)")
 
     if len(config.thermometers) > 0:
+        # this is not needed, but pylint won't let me use variable from walrus below.
+        match = ""
         if any((match := t)['mac'] == mac for t in config.thermometers):
             reading.sensor = match
             readingQueue.append(reading)
-    return not exit_event.is_set()
+    return exit_stat
 
 
 def handle_retry(reading: SensorReading):
+    """Currently only handles errors in posting to influxdb. Adds the message back to queue"""
     if len(readingQueue) < config.errorbuffer.max_items:
         readingQueue.appendleft(reading)
     else:
@@ -76,52 +91,68 @@ def handle_retry(reading: SensorReading):
     exit_event.wait(5)
 
 
+def post_influx(reading: SensorReading):
+    """Post the message to Influxdb using their line protocol"""
+    tags = ','.join([f"{key}={value}" for key,
+                     value in reading.sensor['tags'].items()])
+    payload = f"{config.influxdb.measurement},{tags},name={reading.sensor['name']},mac={reading.sensor['mac']} temperature={reading.temperature},humidity={reading.humidity},battery={reading.battery},voltage={reading.voltage} {reading.timestamp}"
+    try:
+        response = requests.post(influxdb_write_endpoint,
+                                 data=payload, timeout=1)
+        # ', return:{r.status_code}')
+        logging.debug(
+            f'url:{influxdb_write_endpoint}, data: {payload}')
+        if response.status_code != 204:
+            if response.status_code == 404:
+                logging.warning(
+                    "Influxdb database missing!!.. manually create the DB.")
+                handle_retry(reading)
+            else:
+                logging.warning(
+                    f'Failed to save{reading} due to {response.text}')
+    except requests.Timeout:
+        logging.warning("Influxdb Timeout.. retrying")
+        handle_retry(reading)
+    except requests.ConnectionError:
+        logging.warning(
+            "Unable to connect to InfluxDB.. retrying")
+        handle_retry(reading)
+
+
+def publish_mqtt(reading: SensorReading):
+    """Publish sesnor reading to MQTT broker using paho client"""
+    mqtt_client.publish(
+        f"{config.mqtt.topic_prefix}/{reading.sensor['name']}/reading", json.dumps(asdict(reading), default=str))
+
+
 def deque_thread():
+    """background processing which will dequeue the reading and process it"""
     while True:
         try:
             logging.debug(f"Reading Queue Depth: {len(readingQueue)}")
             reading = readingQueue.popleft()
             logging.debug(reading)
             if config.influxdb.enabled:
-                tags = ','.join([f"{key}={value}" for key,
-                                 value in reading.sensor['tags'].items()])
-                payload = f"{config.influxdb.measurement},{tags},name={reading.sensor['name']},mac={reading.sensor['mac']} temperature={reading.temperature},humidity={reading.humidity},battery={reading.battery},voltage={reading.voltage} {reading.timestamp}"
-                try:
-                    r = requests.post(influxdb_write_endpoint,
-                                      data=payload, timeout=1)
-                    # ', return:{r.status_code}')
-                    logging.debug(
-                        f'url:{influxdb_write_endpoint}, data: {payload}')
-                    if r.status_code != 204:
-                        if r.status_code == 404:
-                            logging.warning(
-                                f'Influxdb database missing!!.. manually create the DB.')
-                            handle_retry(reading)
-                        else:
-                            logging.warning(
-                                f'Failed to save{reading} due to {r.text}')
-                except requests.Timeout:
-                    logging.warning(f'Influxdb Timeout.. retrying')
-                    handle_retry(reading)
-                except requests.ConnectionError:
-                    logging.warning(
-                        f'Unable to connect to InfluxDB.. retrying')
-                    handle_retry(reading)
+                post_influx(reading)
+            if config.mqtt.enabled:
+                publish_mqtt(reading)
         except IndexError:
             exit_event.wait(1)
-        except Exception as e:
-            logging.exception(e)
+        except Exception as err:
+            logging.exception(err)
         if exit_event.is_set():
             if len(readingQueue) > 0:
                 logging.warning(f"Queue had {len(readingQueue)} unsaved items")
             break
 
 
-# ref: https://github.com/pvvx/ATC_MiThermometer#bluetooth-advertising-formats
-# this code will support both ATC format and pvvx's custom format.
-# https://github.com/pvvx/ATC_MiThermometer/blob/c3b89a7eddad21c054e352b64af21654d5112421/src/ble.h#L90
-
 def get_data_mac(data):
+    """Extract mac address of the sensor. This also is the loic where we identify the firmware flavour
+
+    # ref: https://github.com/pvvx/ATC_MiThermometer#bluetooth-advertising-formats
+    # this code will support both ATC format and pvvx's custom format.
+    # https://github.com/pvvx/ATC_MiThermometer/blob/c3b89a7eddad21c054e352b64af21654d5112421/src/ble.h#L90
+     """
     pvvx = False
     data_mac = bytearray(data[5:11])
     # pvvx format sends everything in little endian format. Python assumes big endian.
@@ -132,6 +163,7 @@ def get_data_mac(data):
 
 
 def parse_atc_format(data) -> SensorReading:
+    """Transform raw data in atc firmware flavour into sensor reading"""
     try:
         reading = SensorReading(0, 0, 0, 0, int(time.time()))
         reading.temperature, reading.humidity, reading.battery, reading.voltage, reading.counter = struct.unpack(
@@ -145,6 +177,7 @@ def parse_atc_format(data) -> SensorReading:
 
 
 def parse_pvvx_format(data) -> SensorReading:
+    """Transform raw data in pvvx firmware flavour into sensor reading"""
     try:
         reading = SensorReading(0, 0, 0, 0, int(time.time()))
         reading.temperature, reading.humidity, reading.voltage, reading.battery, reading.counter = struct.unpack(
@@ -158,7 +191,8 @@ def parse_pvvx_format(data) -> SensorReading:
         return None
 
 
-def loadConfig() -> Dynaconf:
+def load_config() -> Dynaconf:
+    """load default config and apply any overrides. Returns Dynacof config objet"""
     config = Dynaconf(
         settings_files=['config_default.yaml'],
         envvar_prefix="ATC",
@@ -175,16 +209,41 @@ def loadConfig() -> Dynaconf:
 
 
 def exit_gracefully(signum, stack_frame):
+    """handles exit signals, closes the background thread"""
     # Raises SystemExit(0):
     logging.log(level=log_level, msg=f'received signal{signum}')
+    if config.mqtt.enabled:
+        mqtt_client.publish(f"{config.mqtt.topic_prefix}/status",
+                            payload="Offline", qos=0, retain=True)
+        mqtt_client.disconnect()
+        mqtt_client.loop_stop()
     exit_event.set()
     sys.exit(0)
+
+
+def connect_mqtt() -> mqtt.Client:
+    """Connect to MQTT broker using paho library"""
+    def on_connect(client, userdata, flags, rc, properties=None):
+        if rc == 0:
+            logging.info(f'Connected to mqtt broker at {config.mqtt.broker}')
+            client.publish(f"{config.mqtt.topic_prefix}/status",
+                           payload="Online", qos=0, retain=True)
+        else:
+            logging.error(f'Failed to connect, return code {rc}')
+    client = mqtt.Client(config.mqtt.client_id)
+    client.username_pw_set(config.mqtt.username, config.mqtt.password)
+    client.on_connect = on_connect
+    client.will_set(f"{config.mqtt.topic_prefix}/status",
+                    payload="Offline", qos=0, retain=True)
+    client.connect(config.mqtt.broker, config.mqtt.port, 60)
+    client.loop_start()
+    return client
 
 
 if __name__ == '__main__':  # has a blocking call at the end
     signal.signal(signal.SIGINT, exit_gracefully)
     signal.signal(signal.SIGTERM, exit_gracefully)
-    config = loadConfig()
+    config = load_config()
     log_level = getattr(logging, config.logging.level.upper(), None)
     if not isinstance(log_level, int):
         raise ValueError(f'Invalid log level: {config.logging.level}')
@@ -212,6 +271,10 @@ if __name__ == '__main__':  # has a blocking call at the end
     if config.influxdb.enabled:
         influxdb_write_endpoint = f"{config.influxdb.url}/write?db={config.influxdb.database}&precision={config.influxdb.precision}"
         logging.info(f'writing to {influxdb_write_endpoint}')
+
+    if config.mqtt.enabled:
+        mqtt_client = connect_mqtt()
+
     # Set filter to "True" to see only one packet per device
     logging.info('Start scanning for BLE messages')
     enable_le_scan(sock, filter_duplicates=False)
@@ -219,7 +282,7 @@ if __name__ == '__main__':  # has a blocking call at the end
     exit_event = threading.Event()
     readingQueue = deque()
     queueThread = threading.Thread(target=deque_thread)
-    #queueThread.daemon = True
+    # queueThread.daemon = True
     queueThread.start()
 
     try:
@@ -237,18 +300,22 @@ if __name__ == '__main__':  # has a blocking call at the end
 
 
 class TestClassAtcReader:
+    """Test class to make sure parsing logic works"""
+
     def test_pvvx_parser(self):
+        """Test pvvx parsing"""
         data = bytearray.fromhex('1312161a18332211ccbbaa670981108f0b54af04')
         r = parse_pvvx_format(data)
-        assert r != None
+        assert r is not None
         assert r.temperature == 24.07
         assert r.humidity == 42.25
         assert r.voltage == 2.959
 
     def test_atc_parser(self):
+        """Test atc parsing"""
         data = bytearray.fromhex('1110161a18332211ccbbaa00f02a540b8faf')
         r = parse_atc_format(data)
-        assert r != None
+        assert r is not None
         assert r.temperature == 24.0
         assert r.humidity == 42
         assert r.voltage == 2.959
