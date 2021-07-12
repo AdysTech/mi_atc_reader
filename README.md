@@ -5,9 +5,9 @@ Xiaomi makes Mijia (LYWSD03MMC) & Xiaomi Miaomiaoce (MHO-C401) Smart Bluetooth T
 
 Two open source contributors [atc1441](https://github.com/pvvx/ATC_MiThermometer) and [pvvx](https://github.com/pvvx/ATC_MiThermometer) provided an open source alternate firmware which allows the device to transmit their readings over BLE advertisement.
 
-This repo provides a python module (with options to run via docker:[adystech/mi_atc_reader](https://hub.docker.com/r/adystech/mi_atc_reader)) to consume  those BLE advertisements and write to other data stores (e.g. influxdb)
+This repo provides a python module (with options to run via docker:[adystech/mi_atc_reader](https://hub.docker.com/r/adystech/mi_atc_reader)) to consume  those BLE advertisements and write to other data stores (e.g. influxdb, mqtt)
 
-The configuration ([custom.yml](./custom.yml)) provides placeholders to tag the individual devices with a friendly name, and other tags. Any number of key/value pairs can be provided in the tags and they all will be posted to influx.
+The configuration ([custom.yml](./custom.yml)) provides placeholders to tag the individual devices with a friendly name, and other tags. Any number of key/value pairs can be provided in the tags and they all will be posted to influx. It also handles InfluxDB push failures, and provides customizable retry buffer. For MQTT it uses [Eclipse paho](https://github.com/eclipse/paho.mqtt.python) library to interact with mqtt. Tested with Mosquito broker.
 
 It also supports device discovery so that before the devices can be added to config, they can be recognized. Its suggested to use start the python program, and look at the logs for the discovered devices.
 
