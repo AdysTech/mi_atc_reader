@@ -38,8 +38,9 @@ RUN python -m pytest mi_atc_reader.py -rA
 from base_setup as final_image
 LABEL "contact"="info@adystech.com"
 LABEL repo="https://github.com/AdysTech/mi_atc_reader/"
-LABEL version="1.2"
+LABEL version="1.3"
 LABEL description="Provides a python script as a docker service  \
 which can read BLE advertisements from Xiaomi Smart Bluetooth Thermometer & Hygrometer. \
-Thermometers needs to be running custom open source firmware from pvvx or atc1441"
+Thermometers needs to be running custom open source firmware from pvvx or atc1441. \
+Supports sending the parsed data to Influxdb or MQTT for trend visualization or automation purposes"
 CMD [ "./entry.sh" ]
