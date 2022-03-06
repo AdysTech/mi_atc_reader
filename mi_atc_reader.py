@@ -193,15 +193,11 @@ def parse_pvvx_format(data) -> SensorReading:
 
 def load_config() -> Dynaconf:
     """load default config and apply any overrides. Returns Dynacof config objet"""
-    config = Dynaconf(
-        settings_files=['config_default.yaml'],
-        envvar_prefix="ATC",
-    )
     try:
-        custom_config_file = 'custom.yml'
-        # Add config items from specific file
-        if os.path.exists(custom_config_file):
-            config.load_file(custom_config_file)
+        config = Dynaconf(
+            settings_files=["config_default.yaml", "custom.yml"],
+            envvar_prefix="ATC",
+        )
     except:
         sys.stderr.write("Couldn't load config files")
         raise

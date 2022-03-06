@@ -16,6 +16,22 @@ jobs:
       # https://github.com/docker/setup-qemu-action#usage
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
+      #https://github.com/docker/metadata-action
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          # list of Docker images to use as base name for tags
+          images: adystech/mi_atc_reader
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
 
       # https://github.com/marketplace/actions/docker-setup-buildx
       - name: Set up Docker Buildx
