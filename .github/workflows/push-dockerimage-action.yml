@@ -5,6 +5,10 @@ on:
     branches:    
       # Push events on main branch
       - main
+env:
+  #REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   push_to_registry:
     name: Push Docker image to Docker Hub
@@ -16,13 +20,19 @@ jobs:
       # https://github.com/docker/setup-qemu-action#usage
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
+      
+      - name: Retrieve author data
+        run: |
+          echo AUTHOR=$(curl -sSL ${{ github.event.repository.owner.url }} | jq -r '.name') >> $GITHUB_ENV
       #https://github.com/docker/metadata-action
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v3
         with:
           # list of Docker images to use as base name for tags
-          images: adystech/mi_atc_reader
+          images: ${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.authors=${{ env.AUTHOR }}
           # generate Docker tags based on the following events/attributes
           tags: |
             type=schedule
@@ -63,5 +73,6 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64,linux/armhf
           push: true
-          tags: adystech/mi_atc_reader:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           target: final_image
