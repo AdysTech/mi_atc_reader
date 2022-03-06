@@ -1,4 +1,5 @@
 dynaconf
-PyBluez
+# https://stackoverflow.com/questions/70999481/how-do-i-resolve-py-ssize-t-clean-macro-must-be-defined-for-formats-for-py/71101727#71101727
+# PyBluez
 requests
 paho-mqtt
