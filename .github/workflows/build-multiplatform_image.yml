@@ -10,6 +10,10 @@ on:
     branches:
       - main
     types: [opened, synchronize]
+env:
+  #REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   build_image:
     name: build a multi platform Docker image
@@ -22,13 +26,19 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
 
+      - name: Retrieve author data
+        run: |
+          echo AUTHOR=$(curl -sSL ${{ github.event.repository.owner.url }} | jq -r '.name') >> $GITHUB_ENV
+
       #https://github.com/docker/metadata-action
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v3
         with:
           # list of Docker images to use as base name for tags
-          images: adystech/mi_atc_reader
+          images: ${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.authors=${{ env.AUTHOR }}
           # generate Docker tags based on the following events/attributes
           tags: |
             type=schedule
@@ -52,3 +62,5 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/armhf
           push: false
           target: test_image
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

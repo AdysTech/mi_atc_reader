@@ -14,6 +14,7 @@ RUN apt-get update \
         libbluetooth-dev \
         python-dev \
     && pip install -r requirements.txt \
+    && pip install git+https://github.com/pybluez/pybluez \
     && git clone https://github.com/colin-guyon/py-bluetooth-utils.git --depth=1 \
     && cp py-bluetooth-utils/bluetooth_utils.py . \
     && apt-get remove -y \
