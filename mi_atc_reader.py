@@ -56,7 +56,10 @@ def le_advertise_packet_handler(mac, adv_type, data, rssi):
     Both atc1441 and pvvx forks send data on GATT Service 0x181A Environmental Sensing
     """
     exit_stat = not exit_event.is_set()
-    if struct.unpack('<H', data[3:5])[0] != 0x181A:
+    if adv_type != 0x00: #check if its ADV_IND: Connectable Scannable Undirected advertising.
+        return exit_stat
+    
+    if len(data) > 6 and struct.unpack('<H', data[3:5])[0] != 0x181A:
         return exit_stat
 
     # data format adds mac as part of data structure.
