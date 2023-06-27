@@ -12,7 +12,8 @@ RUN apt-get update \
         git \	
         libbluetooth3 \
         libbluetooth-dev \
-        python-dev \
+        #python-dev \
+        python-dev-is-python3 \
     && pip install -r requirements.txt \
     && pip install git+https://github.com/pybluez/pybluez \
     && git clone https://github.com/colin-guyon/py-bluetooth-utils.git --depth=1 \
